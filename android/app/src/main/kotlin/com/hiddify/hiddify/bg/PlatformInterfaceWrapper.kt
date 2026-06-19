@@ -148,17 +148,20 @@ interface PlatformInterfaceWrapper : PlatformInterface {
     }
 
     override fun readWIFIState(): WIFIState? {
-        @Suppress("DEPRECATION")
-        val wifiInfo =
-            Application.wifiManager.connectionInfo ?: return null
-        var ssid = wifiInfo.ssid
-        if (ssid == "<unknown ssid>") {
-            return WIFIState("", "")
-        }
-        if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
-            ssid = ssid.substring(1, ssid.length - 1)
-        }
-        return WIFIState(ssid, wifiInfo.bssid)
+        return runCatching {
+            @Suppress("DEPRECATION")
+            val wifiInfo = Application.wifiManager.connectionInfo ?: return null
+            var ssid = wifiInfo.ssid
+            if (ssid == "<unknown ssid>") {
+                return WIFIState("", "")
+            }
+            if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
+                ssid = ssid.substring(1, ssid.length - 1)
+            }
+            WIFIState(ssid, wifiInfo.bssid)
+        }.onFailure {
+            Log.w("PlatformInterface", "failed to read WIFI state", it)
+        }.getOrNull()
     }
 
     override fun localDNSTransport(): LocalDNSTransport? = LocalResolver
