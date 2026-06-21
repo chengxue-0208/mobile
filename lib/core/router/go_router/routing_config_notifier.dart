@@ -15,6 +15,7 @@ import 'package:hiddify/features/log/overview/logs_page.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:hiddify/features/profile/details/profile_details_page.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_page.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_page.dart';
 import 'package:hiddify/features/route_rules/notifier/rule_notifier.dart';
@@ -68,6 +69,14 @@ int getIndexOfBranch(bool isMobileBreakpoint, bool showProfilesAction, String na
 
 @Riverpod(keepAlive: true)
 class RoutingConfigNotifier extends _$RoutingConfigNotifier {
+  void _importProfile(String url) {
+    if (_isAutoImportDeepLink(url)) {
+      ref.read(addProfileNotifierProvider.notifier).addClipboard(url);
+    } else {
+      ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url, triggeredByDeepLink: true);
+    }
+  }
+
   @override
   RoutingConfig build() {
     final isMobileBreakpoint = ref.watch(isMobileBreakpointProvider);
@@ -105,20 +114,12 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           // Intro is completed
           // Current page in '/intro'
           if (url != null && Uri.parse(url).host == 'import') {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => ref
-                  .read(bottomSheetsNotifierProvider.notifier)
-                  .showAddProfile(url: url, triggeredByDeepLink: !_isAutoImportDeepLink(url!)),
-            );
+            WidgetsBinding.instance.addPostFrameCallback((_) => _importProfile(url!));
           }
           return '/home';
         } else if (url != null && Uri.parse(url).host == 'import') {
           // Auto import profile from url
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => ref
-                .read(bottomSheetsNotifierProvider.notifier)
-                .showAddProfile(url: url, triggeredByDeepLink: !_isAutoImportDeepLink(url!)),
-          );
+          WidgetsBinding.instance.addPostFrameCallback((_) => _importProfile(url!));
           return '/home';
         } else if (url != null) {
           final uri = Uri.parse(url);
