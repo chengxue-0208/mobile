@@ -40,7 +40,7 @@ enum ProxyType {
 
   String get key => name;
 
-  static List<ProxyType> groupValues = [selector, urltest, balancer];
+  static List<ProxyType> groupValues = [selector];
 
   bool get isGroup => ProxyType.groupValues.contains(this);
   static final Map<String, ProxyType> _keyMap = Map.fromEntries(ProxyType.values.map((e) => MapEntry(e.key, e)));

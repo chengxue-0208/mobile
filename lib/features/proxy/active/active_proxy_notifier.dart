@@ -84,7 +84,14 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     return _proxyRepo
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
-        .map((event) => event.firstOrNull?.items.first ?? OutboundInfo());
+        .map(
+          (event) =>
+              event.firstOrNull?.items.where((item) {
+                final type = item.type.toLowerCase();
+                return item.tag != 'lowest' && item.tag != 'balance' && type != 'urltest' && type != 'balancer';
+              }).firstOrNull ??
+              OutboundInfo(),
+        );
   }
 
   ProxyRepository get _proxyRepo => ref.read(proxyRepositoryProvider);

@@ -224,14 +224,6 @@ class RoutingOptionsPage extends HookConsumerWidget {
                       if (context.mounted) context.goNamed('perAppProxy');
                     },
                   ),
-                ChoicePreferenceWidget(
-                  title: t.pages.settings.routing.generalOptions.balancerStrategy.title,
-                  icon: Icons.balance_rounded,
-                  selected: ref.watch(ConfigOptions.balancerStrategy),
-                  preferences: ref.watch(ConfigOptions.balancerStrategy.notifier),
-                  choices: BalancerStrategy.values,
-                  presentChoice: (value) => value.present(t),
-                ),
                 SwitchListTile.adaptive(
                   title: Text(t.pages.settings.routing.generalOptions.resolveDestination),
                   secondary: const Icon(Icons.find_replace_rounded),

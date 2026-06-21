@@ -139,13 +139,18 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   Future<OutboundGroup?> _sortOutbounds(OutboundGroup? proxies, ProxiesSort sortBy) async {
     if (proxies == null) return null;
 
+    final visibleItems = proxies.items.where((item) {
+      final type = item.type.toLowerCase();
+      return item.tag != 'lowest' && item.tag != 'balance' && type != 'urltest' && type != 'balancer';
+    });
+
     final sortedItems = switch (sortBy) {
-      ProxiesSort.name => proxies.items.sortedWith((a, b) {
+      ProxiesSort.name => visibleItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
         return a.tag.compareTo(b.tag);
       }),
-      ProxiesSort.delay => proxies.items.sortedWith((a, b) {
+      ProxiesSort.delay => visibleItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
 
@@ -156,8 +161,8 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         if (ai > 0 && bi == 0) return -1;
         return ai.compareTo(bi);
       }),
-      ProxiesSort.unsorted => proxies.items,
-      ProxiesSort.usage => proxies.items.sortedWith((a, b) {
+      ProxiesSort.unsorted => visibleItems,
+      ProxiesSort.usage => visibleItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
         return (b.upload + b.download).compareTo(a.upload + a.download);
