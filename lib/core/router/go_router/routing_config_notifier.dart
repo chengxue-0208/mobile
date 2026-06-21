@@ -46,6 +46,18 @@ final loadingConfig = RoutingConfig(
   routes: <RouteBase>[GoRoute(path: '/home', builder: (context, state) => const Material())],
 );
 
+const _autoImportSubscriptionUrl = 'http://192.168.100.99:3000/subscription/subscribe';
+const _autoImportProfileName = 'Auto Subscription';
+bool _autoImportHandled = false;
+
+String _autoImportDeepLink() => Uri(
+  scheme: 'hiddify',
+  host: 'import',
+  queryParameters: {'url': _autoImportSubscriptionUrl, 'name': _autoImportProfileName},
+).toString();
+
+bool _isAutoImportDeepLink(String url) => url == _autoImportDeepLink();
+
 String getNameOfBranch(bool isMobileBreakpoint, bool showProfilesAction, int index) => isMobileBreakpoint
     ? ['home', 'settings'][index]
     : ['home', if (showProfilesAction) 'profiles', 'settings', 'logs', 'about'][index];
@@ -81,24 +93,31 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           // Get the configured URL for intro
           url = state.uri.queryParameters['url'];
         }
+        if (url == null && !_autoImportHandled) {
+          url = _autoImportDeepLink();
+          _autoImportHandled = true;
+        }
 
         if (!ref.read(Preferences.introCompleted)) {
           // Intro is not completed
-          return url != null ? '/intro?url=$url' : '/intro';
+          return url != null ? '/intro?url=${Uri.encodeComponent(url)}' : '/intro';
         } else if (state.matchedLocation == '/intro') {
           // Intro is completed
           // Current page in '/intro'
           if (url != null && Uri.parse(url).host == 'import') {
             WidgetsBinding.instance.addPostFrameCallback(
-              (_) =>
-                  ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url, triggeredByDeepLink: true),
+              (_) => ref
+                  .read(bottomSheetsNotifierProvider.notifier)
+                  .showAddProfile(url: url, triggeredByDeepLink: !_isAutoImportDeepLink(url!)),
             );
           }
           return '/home';
         } else if (url != null && Uri.parse(url).host == 'import') {
           // Auto import profile from url
           WidgetsBinding.instance.addPostFrameCallback(
-            (_) => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url, triggeredByDeepLink: true),
+            (_) => ref
+                .read(bottomSheetsNotifierProvider.notifier)
+                .showAddProfile(url: url, triggeredByDeepLink: !_isAutoImportDeepLink(url!)),
           );
           return '/home';
         } else if (url != null) {
