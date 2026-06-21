@@ -15,7 +15,7 @@ Environment environment(EnvironmentRef ref) => throw Exception("override environ
 class AppInfo extends _$AppInfo {
   @override
   Future<AppInfoEntity> build() async {
-    final packageInfo = await PackageInfo.fromPlatform();
+    final packageInfo = await _loadPackageInfo();
     final environment = ref.watch(environmentProvider);
     return AppInfoEntity(
       name: packageInfo.appName,
@@ -26,5 +26,18 @@ class AppInfo extends _$AppInfo {
       operatingSystemVersion: kIsWeb ? "web" : Platform.operatingSystemVersion,
       environment: environment,
     );
+  }
+
+  Future<PackageInfo> _loadPackageInfo() async {
+    try {
+      return await PackageInfo.fromPlatform();
+    } catch (_) {
+      return PackageInfo(
+        appName: "Hiddify",
+        packageName: "app.hiddify.com",
+        version: "4.1.2",
+        buildNumber: "40102",
+      );
+    }
   }
 }
