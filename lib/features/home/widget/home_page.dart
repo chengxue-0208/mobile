@@ -6,7 +6,6 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/profile/widget/profile_tile.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
 import 'package:hiddify/gen/assets.gen.dart';
@@ -21,7 +20,6 @@ class HomePage extends HookConsumerWidget {
     final theme = Theme.of(context);
     final t = ref.watch(translationsProvider).requireValue;
     // final hasAnyProfile = ref.watch(hasAnyProfileProvider);
-    final activeProfile = ref.watch(activeProfileProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -98,18 +96,8 @@ class HomePage extends HookConsumerWidget {
                     // switch (activeProfile) {
                     // AsyncData(value: final profile?) =>
                     MultiSliver(
-                      children: [
-                        // const Gap(100),
-                        switch (activeProfile) {
-                          AsyncData(value: final profile?) => ProfileTile(
-                            profile: profile,
-                            isMain: true,
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            color: Theme.of(context).colorScheme.surfaceContainer,
-                          ),
-                          _ => const Text(""),
-                        },
-                        const SliverFillRemaining(
+                      children: const [
+                        SliverFillRemaining(
                           hasScrollBody: false,
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

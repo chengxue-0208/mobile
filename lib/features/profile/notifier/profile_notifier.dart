@@ -38,7 +38,7 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
       final notification = ref.read(inAppNotificationControllerProvider);
       switch (next) {
         case AsyncData(value: final _?):
-          notification.showSuccessToast(t.pages.profiles.msg.save.success);
+          return;
         case AsyncError(:final error):
           if (error case ProfileInvalidUrlFailure()) {
             notification.showErrorToast(t.pages.profiles.msg.invalidUrl);
