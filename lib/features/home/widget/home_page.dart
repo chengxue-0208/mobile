@@ -45,6 +45,17 @@ class HomePage extends HookConsumerWidget {
             ),
           ],
         ),
+        actions: [
+          Semantics(
+            key: const ValueKey("profile_add_button"),
+            label: t.pages.profiles.add,
+            child: IconButton(
+              icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
+              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
+            ),
+          ),
+          const Gap(8),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
