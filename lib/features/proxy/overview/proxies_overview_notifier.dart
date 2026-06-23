@@ -7,13 +7,17 @@ import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
+import 'package:hiddify/features/connection/data/connection_data_providers.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/data/pending_proxy_selection.dart';
+import 'package:hiddify/features/proxy/data/proxy_delay_cache.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
+import 'package:hiddify/features/settings/data/config_option_data_providers.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
 
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -107,6 +111,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     final profilesRepo = ref.read(profileRepositoryProvider).requireValue;
     final preferences = ref.read(sharedPreferencesProvider).requireValue;
     final pendingSelection = PendingProxySelectionStore.read(preferences, profile.id);
+    final cachedDelays = ProxyDelayCacheStore.read(preferences, profile.id);
 
     String profContent;
     try {
@@ -147,7 +152,15 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         if (['direct', 'bypass', 'direct-fragment'].contains(tag)) continue;
 
         items.add(
-          OutboundInfo(tag: tag, tagDisplay: tag, type: type, ipinfo: IpInfo(), isVisible: true, isSelected: false),
+          OutboundInfo(
+            tag: tag,
+            tagDisplay: tag,
+            type: type,
+            urlTestDelay: cachedDelays[tag] ?? 0,
+            ipinfo: IpInfo(),
+            isVisible: true,
+            isSelected: false,
+          ),
         );
       }
 
@@ -170,6 +183,12 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       loggy.error('error parsing disconnected proxy list', e, st);
       return null;
     }
+  }
+
+  Future<void> _persistDelayCache(String profileId, OutboundGroup group) async {
+    final preferences = ref.read(sharedPreferencesProvider).requireValue;
+    final delays = <String, int>{for (final item in group.items) item.tag: item.urlTestDelay};
+    await ProxyDelayCacheStore.write(preferences, profileId, delays);
   }
 
   // Future<List<OutboundGroup>> _sortOutbounds(
@@ -321,12 +340,47 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
 
   Future<void> urlTest(String groupTag) async {
     loggy.debug("testing group: [$groupTag]");
-    if (state case AsyncData()) {
-      await ref.read(hapticServiceProvider.notifier).lightImpact();
+    if (!state.hasValue) return;
+    await ref.read(hapticServiceProvider.notifier).lightImpact();
+
+    if (ref.read(serviceRunningProvider)) {
       await ref.read(proxyRepositoryProvider).urlTest(groupTag).getOrElse((err) {
         loggy.error("error testing group", err);
         throw err;
       }).run();
+      final activeProfile = await ref.read(activeProfileProvider.future);
+      final group = state.value;
+      if (activeProfile != null && group != null) {
+        await _persistDelayCache(activeProfile.id, group);
+      }
+      return;
+    }
+
+    final activeProfile = await ref.read(activeProfileProvider.future);
+    if (activeProfile == null) return;
+
+    final setupResult = await ref.read(connectionRepositoryProvider).setup().run();
+    if (setupResult.isLeft()) return;
+
+    final configOptions = ref.read(configOptionRepositoryProvider);
+    final singbox = ref.read(hiddifyCoreServiceProvider);
+    final optionsResult = configOptions.fullOptionsOverrided(activeProfile.profileOverride());
+    final options = optionsResult.match((_) => null, (value) => value);
+    if (options == null) return;
+
+    final changeResult = await singbox.changeOptions(options).run();
+    if (changeResult.isLeft()) return;
+
+    final preview = await singbox
+        .previewOutbounds(ref.read(profilePathResolverProvider).file(activeProfile.id).path, urlTestTag: groupTag)
+        .run();
+    final previewGroup = preview.getOrElse((_) => null);
+    if (previewGroup == null) return;
+
+    final sorted = await _sortOutbounds(previewGroup, ref.read(proxiesSortNotifierProvider));
+    if (sorted != null) {
+      await _persistDelayCache(activeProfile.id, sorted);
+      state = AsyncValue.data(sorted);
     }
   }
 }

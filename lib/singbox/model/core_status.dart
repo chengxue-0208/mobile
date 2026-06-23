@@ -40,6 +40,9 @@ sealed class CoreStatus with _$CoreStatus {
   factory CoreStatus.fromCoreInfo(CoreInfoResponse event) {
     switch (event.coreState) {
       case CoreStates.STOPPED:
+        if (event.message.toLowerCase().contains("denied")) {
+          return CoreStatus.stopped(alert: CoreAlert.requestVPNPermission, message: event.message);
+        }
         final CoreAlert? alert = switch (event.messageType) {
           MessageType.EMPTY => null,
           MessageType.ERROR_READING_CONFIG => CoreAlert.emptyConfiguration,

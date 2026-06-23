@@ -42,6 +42,32 @@ class HiddifyCoreService with InfraLogger {
   final CallOptions? grpcOptions = null; //CallOptions(timeout: const Duration(milliseconds: 10000));
   final Map<String, StreamSubscription?> subscriptions = {};
   List<OutboundGroup> latest = [];
+  bool _suppressTransientBackgroundSetupStatus = false;
+
+  bool _shouldRetryBackgroundSetup(CoreStatus status) {
+    return switch (status) {
+      CoreStopped(alert: CoreAlert.createService || CoreAlert.startService) => true,
+      _ => false,
+    };
+  }
+
+  String _grpcErrorMessage(GrpcError error) {
+    return error.message ?? error.toString();
+  }
+
+  bool _isPermissionDeniedGrpcError(GrpcError error) {
+    return _grpcErrorMessage(error).toLowerCase().contains("denied");
+  }
+
+  bool _shouldRetryBackgroundStart(GrpcError error) {
+    if (error.code == StatusCode.unavailable) return true;
+    final message = _grpcErrorMessage(error).toLowerCase();
+    return error.code == StatusCode.unknown &&
+        (message.contains("http/2") ||
+            message.contains("connection") ||
+            message.contains("not started") ||
+            message.contains("temporarily unavailable"));
+  }
 
   Future<void> init() async {
     await setup()
@@ -140,7 +166,18 @@ class HiddifyCoreService with InfraLogger {
     return TaskEither(() async {
       statusController.add(currentState = const CoreStatus.starting());
       loggy.debug("starting");
-      final background = await core.setupBackground(path, name);
+      late CoreStatus background;
+      _suppressTransientBackgroundSetupStatus = true;
+      try {
+        background = await core.setupBackground(path, name);
+        if (_shouldRetryBackgroundSetup(background)) {
+          loggy.warning("background core setup failed on first attempt, retrying once", background);
+          await Future.delayed(const Duration(milliseconds: 500));
+          background = await core.setupBackground(path, name);
+        }
+      } finally {
+        _suppressTransientBackgroundSetupStatus = false;
+      }
       if (background != const CoreStatus.started()) {
         statusController.add(currentState = const CoreStatus.stopped());
         return left(background.getCoreAlert() ?? const ConnectionFailure.unexpected("failed to start core"));
@@ -158,41 +195,62 @@ class HiddifyCoreService with InfraLogger {
       // }
       // final content = await File(path).readAsString();
       // loggy.debug("starting with content: $content");
-      try {
-        final res = await core.bgClient.start(
-          StartRequest(
-            configPath: path,
-            configName: name,
-            // configContent: content,
-            disableMemoryLimit: disableMemoryLimit,
-          ),
-        );
-        ref.read(coreRestartSignalProvider.notifier).restart();
-        if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
-          final alert = res.message.contains("denied") ? CoreAlert.requestVPNPermission : CoreAlert.startFailed;
-          currentState = CoreStatus.stopped(
-            alert: alert,
-            message: "failed to start core ${res.messageType} ${res.message}",
+      var startAttempt = 0;
+      while (true) {
+        startAttempt += 1;
+        try {
+          final res = await core.bgClient.start(
+            StartRequest(
+              configPath: path,
+              configName: name,
+              // configContent: content,
+              disableMemoryLimit: disableMemoryLimit,
+            ),
           );
+          ref.read(coreRestartSignalProvider.notifier).restart();
+          if (res.messageType != MessageType.ALREADY_STARTED && res.messageType != MessageType.EMPTY) {
+            final alert = res.message.toLowerCase().contains("denied")
+                ? CoreAlert.requestVPNPermission
+                : CoreAlert.startFailed;
+            currentState = CoreStatus.stopped(
+              alert: alert,
+              message: "failed to start core ${res.messageType} ${res.message}",
+            );
 
-          statusController.add(currentState);
+            statusController.add(currentState);
 
-          return left(
-            currentState.getCoreAlert() ??
-                ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
-          );
+            return left(
+              currentState.getCoreAlert() ??
+                  ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
+            );
+          }
+          break;
+        } on GrpcError catch (e) {
+          final errorMessage = _grpcErrorMessage(e);
+          loggy.error("failed to start bg core: $e");
+          ref.read(coreRestartSignalProvider.notifier).restart();
+
+          if (_isPermissionDeniedGrpcError(e)) {
+            currentState = CoreStatus.stopped(alert: CoreAlert.requestVPNPermission, message: errorMessage);
+            statusController.add(currentState);
+            return left(ConnectionFailure.missingVpnPermission(errorMessage));
+          }
+
+          if (startAttempt == 1 && _shouldRetryBackgroundStart(e)) {
+            loggy.warning("background core start failed on first attempt, retrying once", e);
+            await Future.delayed(const Duration(milliseconds: 500));
+            continue;
+          }
+
+          if (e.code == StatusCode.unavailable) {
+            return left(const ConnectionFailure.backgroundCoreNotAvailable("background core is not started yet!"));
+          }
+          // throw InvalidConfig(e.message);
+          // throw DioException.connectionError(requestOptions: RequestOptions(), reason: e.codeName, error: e);
+
+          // throw DioException(requestOptions: RequestOptions(), error: e);
+          return left(ConnectionFailure.unexpected("failed to start background core: $errorMessage"));
         }
-      } on GrpcError catch (e) {
-        loggy.error("failed to start bg core: $e");
-        ref.read(coreRestartSignalProvider.notifier).restart();
-        if (e.code == StatusCode.unavailable) {
-          return left(const ConnectionFailure.unexpected("background core is not started yet!"));
-        }
-        // throw InvalidConfig(e.message);
-        // throw DioException.connectionError(requestOptions: RequestOptions(), reason: e.codeName, error: e);
-
-        // throw DioException(requestOptions: RequestOptions(), error: e);
-        return left(const ConnectionFailure.unexpected("failed to start background core"));
       }
 
       // if (res.messageType != MessageType.EMPTY) return left(res);
@@ -361,6 +419,28 @@ class HiddifyCoreService with InfraLogger {
     });
   }
 
+  TaskEither<String, OutboundGroup?> previewOutbounds(String configPath, {String? urlTestTag}) {
+    return TaskEither(() async {
+      try {
+        final parseResponse = await core.fgClient.parse(ParseRequest(configPath: configPath, debug: false));
+        if (parseResponse.responseCode != ResponseCode.OK) {
+          return left("${parseResponse.responseCode} ${parseResponse.message}");
+        }
+        if (urlTestTag != null && urlTestTag.isNotEmpty) {
+          final testResponse = await core.fgClient.urlTest(UrlTestRequest(tag: urlTestTag));
+          if (testResponse.code != ResponseCode.OK) {
+            return left("${testResponse.code} ${testResponse.message}");
+          }
+        }
+        final outbounds = await core.fgClient.outboundsInfo(Empty()).first.timeout(const Duration(seconds: 5));
+        return right(outbounds.items.isEmpty ? null : outbounds.items.first);
+      } catch (e) {
+        loggy.error("error previewing outbounds: $e");
+        rethrow;
+      }
+    });
+  }
+
   List<LogMessage> logBuffer = [];
 
   // SingboxConfigOption? latestOptions;
@@ -457,7 +537,12 @@ class HiddifyCoreService with InfraLogger {
           })
           .endWith(CoreInfoResponse(coreState: CoreStates.STOPPED))
           .map((event) {
-            currentState = CoreStatus.fromCoreInfo(event);
+            final nextState = CoreStatus.fromCoreInfo(event);
+            if (_suppressTransientBackgroundSetupStatus && _shouldRetryBackgroundSetup(nextState)) {
+              loggy.warning("suppressing transient background setup status", nextState);
+              return currentState;
+            }
+            currentState = nextState;
             statusController.add(currentState);
             return currentState;
           }),

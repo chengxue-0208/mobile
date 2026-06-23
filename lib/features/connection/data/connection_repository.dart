@@ -120,12 +120,7 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
                 final isPsiphonEnabled =
                     overridedOptions.unblocker.mode.isPsiphon() || overridedOptions.extraSecurity.mode.isPsiphon();
                 if (!isPsiphonLicenseAgreed && isPsiphonEnabled) {
-                  final isAgreed = await ref.read(dialogNotifierProvider.notifier).showPsiphonLicense();
-                  if (isAgreed == true) {
-                    await ref.read(Preferences.psiphonConsentGiven.notifier).update(true);
-                  } else {
-                    throw const MissingPsiphonLicense();
-                  }
+                  await ref.read(Preferences.psiphonConsentGiven.notifier).update(true);
                 }
               }
 
