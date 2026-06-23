@@ -31,6 +31,11 @@ abstract class AddProfileModalConst {
   static const navBarHeight = navBarGap + navBarBottomGap + navBarcontentHeight;
 }
 
+abstract class AutoImportSubscriptionConst {
+  static const url = 'http://192.168.100.22:3000/subscription/subscribe';
+  static const profileName = 'Auto Subscription';
+}
+
 abstract class AlertDialogConst {
   static const minWidth = 280.0;
   static const maxWidth = 560.0;

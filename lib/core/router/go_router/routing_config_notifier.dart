@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/adaptive_layout/my_adaptive_layout.dart';
@@ -48,14 +49,10 @@ final loadingConfig = RoutingConfig(
   routes: <RouteBase>[GoRoute(path: '/home', builder: (context, state) => const Material())],
 );
 
-const _autoImportSubscriptionUrl = 'http://192.168.100.22:3000/subscription/subscribe';
-const _autoImportProfileName = 'Auto Subscription';
-bool _autoImportHandled = false;
-
 String _autoImportDeepLink() => Uri(
   scheme: 'hiddify',
   host: 'import',
-  queryParameters: {'url': _autoImportSubscriptionUrl, 'name': _autoImportProfileName},
+  queryParameters: {'url': AutoImportSubscriptionConst.url, 'name': AutoImportSubscriptionConst.profileName},
 ).toString();
 
 bool _isAutoImportDeepLink(String url) => url == _autoImportDeepLink();
@@ -103,11 +100,6 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           // Get the configured URL for intro
           url = state.uri.queryParameters['url'];
         }
-        if (url == null && !_autoImportHandled) {
-          url = _autoImportDeepLink();
-          _autoImportHandled = true;
-        }
-
         if (!ref.read(Preferences.introCompleted)) {
           // Intro is not completed
           return url != null ? '/intro?url=${Uri.encodeComponent(url)}' : '/intro';
