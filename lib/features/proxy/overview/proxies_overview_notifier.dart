@@ -168,6 +168,13 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       if (pendingSelection != null && items.any((item) => item.tag == pendingSelection)) {
         selectedTag = pendingSelection;
       }
+      if (selectedTag.isEmpty && cachedDelays.isNotEmpty) {
+        selectedTag = cachedDelays.entries
+            .where((entry) => entry.value > 0)
+            .map((entry) => entry.key)
+            .toList()
+            .reduce((a, b) => cachedDelays[a]! < cachedDelays[b]! ? a : b);
+      }
       for (final item in items) {
         item.isSelected = item.tag == selectedTag;
       }
