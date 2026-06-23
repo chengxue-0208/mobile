@@ -47,7 +47,7 @@ final loadingConfig = RoutingConfig(
   routes: <RouteBase>[GoRoute(path: '/home', builder: (context, state) => const Material())],
 );
 
-const _autoImportSubscriptionUrl = 'http://192.168.100.99:3000/subscription/subscribe';
+const _autoImportSubscriptionUrl = 'http://192.168.100.22:3000/subscription/subscribe';
 const _autoImportProfileName = 'Auto Subscription';
 bool _autoImportHandled = false;
 
