@@ -174,7 +174,10 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
             .map((entry) => entry.key)
             .toList()
             .reduce((a, b) => cachedDelays[a]! < cachedDelays[b]! ? a : b);
-        await PendingProxySelectionStore.write(preferences, profile.id, selectedTag);
+        final writeSuccess = await PendingProxySelectionStore.write(preferences, profile.id, selectedTag);
+        if (!writeSuccess) {
+          loggy.warning("failed to write pending proxy selection to cache: $selectedTag");
+        }
       }
       for (final item in items) {
         item.isSelected = item.tag == selectedTag;
