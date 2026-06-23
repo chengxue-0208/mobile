@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dartx/dartx.dart';
 
@@ -7,8 +8,11 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
+import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
+import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/proxy/data/pending_proxy_selection.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
-import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 
 import 'package:hiddify/utils/riverpod_utils.dart';
@@ -60,10 +64,15 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   Stream<OutboundGroup?> build() {
     ref.disposeDelay(const Duration(seconds: 15));
     final serviceRunning = ref.watch(serviceRunningProvider);
-    if (!serviceRunning) {
-      return Stream.error(const ServiceNotRunning());
-    }
     final sortBy = ref.watch(proxiesSortNotifierProvider);
+    if (!serviceRunning) {
+      return ref
+          .watch(profileRepositoryProvider)
+          .requireValue
+          .watchActiveProfile()
+          .map((event) => event.getOrElse((err) => throw err))
+          .asyncMap((profile) async => await _buildProfileOutbounds(profile, sortBy));
+    }
     // yield* ref
     //     .watch(proxyRepositoryProvider)
     //     .watchProxies()
@@ -91,6 +100,76 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
           }),
         )
         .asyncMap((proxies) async => await _sortOutbounds(proxies, sortBy));
+  }
+
+  Future<OutboundGroup?> _buildProfileOutbounds(ProfileEntity? profile, ProxiesSort sortBy) async {
+    if (profile == null) return null;
+    final profilesRepo = ref.read(profileRepositoryProvider).requireValue;
+    final preferences = ref.read(sharedPreferencesProvider).requireValue;
+    final pendingSelection = PendingProxySelectionStore.read(preferences, profile.id);
+
+    String profContent;
+    try {
+      profContent = (await profilesRepo.generateConfig(profile.id).run()).match(
+        (failure) => throw Exception('Failed to generate config: $failure'),
+        (content) => content,
+      );
+    } catch (e, st) {
+      loggy.warning('failed to generate config for disconnected proxy list', e, st);
+      profContent = await profilesRepo.getRawConfig(profile.id).run().then((e) => e.getOrElse((_) => ""));
+    }
+
+    try {
+      final jsonObject = jsonDecode(profContent);
+      if (jsonObject is! Map<String, dynamic> || jsonObject['outbounds'] is! List) {
+        return null;
+      }
+
+      final outboundsJson = jsonObject['outbounds'] as List<dynamic>;
+      final items = <OutboundInfo>[];
+      String selectedTag = "";
+
+      for (final outbound in outboundsJson) {
+        if (outbound is! Map<String, dynamic>) continue;
+        final type = outbound['type']?.toString() ?? "";
+        final tag = outbound['tag']?.toString() ?? "";
+        if (tag.isEmpty || type.isEmpty) continue;
+
+        if (type == 'selector' || type == 'urltest' || type == 'balancer') {
+          final defaultTag = outbound['default']?.toString();
+          if (selectedTag.isEmpty && defaultTag != null && defaultTag.isNotEmpty) {
+            selectedTag = defaultTag;
+          }
+          continue;
+        }
+
+        if (type == 'dns' || type == 'block') continue;
+        if (['direct', 'bypass', 'direct-fragment'].contains(tag)) continue;
+
+        items.add(
+          OutboundInfo(tag: tag, tagDisplay: tag, type: type, ipinfo: IpInfo(), isVisible: true, isSelected: false),
+        );
+      }
+
+      if (items.isEmpty) return null;
+      if (pendingSelection != null && items.any((item) => item.tag == pendingSelection)) {
+        selectedTag = pendingSelection;
+      }
+      for (final item in items) {
+        item.isSelected = item.tag == selectedTag;
+      }
+      final fallbackGroup = OutboundGroup(
+        tag: 'profile',
+        type: 'selector',
+        selected: selectedTag,
+        selectable: false,
+        items: items,
+      );
+      return await _sortOutbounds(fallbackGroup, sortBy);
+    } catch (e, st) {
+      loggy.error('error parsing disconnected proxy list', e, st);
+      return null;
+    }
   }
 
   // Future<List<OutboundGroup>> _sortOutbounds(
@@ -209,13 +288,31 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
     if (!state.hasValue) return;
     final outbounds = state.value!;
+    final activeProfile = await ref.read(activeProfileProvider.future);
+    if (activeProfile == null) return;
+    final preferences = ref.read(sharedPreferencesProvider).requireValue;
+
+    if (!ref.read(serviceRunningProvider)) {
+      await PendingProxySelectionStore.write(preferences, activeProfile.id, outboundTag);
+      for (final item in outbounds.items) {
+        item.isSelected = item.tag == outboundTag;
+      }
+      outbounds.selected = outboundTag;
+      state = AsyncValue.data(outbounds);
+      return;
+    }
+
     await ref.read(hapticServiceProvider.notifier).lightImpact();
     await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
       loggy.warning("error selecting outbound", err);
       throw err;
     }).run();
+    await PendingProxySelectionStore.write(preferences, activeProfile.id, outboundTag);
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
+      for (final item in outbounds.items) {
+        item.isSelected = item.tag == outboundTag;
+      }
       newselected.isSelected = true;
       outbounds.selected = newselected.tag;
       state = AsyncValue.data(outbounds);

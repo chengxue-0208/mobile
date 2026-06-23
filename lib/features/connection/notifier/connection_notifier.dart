@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
+import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/connection/data/connection_data_providers.dart';
 import 'package:hiddify/features/connection/data/connection_repository.dart';
@@ -10,6 +11,8 @@ import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/proxy/data/pending_proxy_selection.dart';
+import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/hiddifycore/init_signal.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -101,13 +104,14 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       }
       loggy.info("active profile changed, reconnecting");
       await ref.read(Preferences.startedByUser.notifier).update(true);
-      await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).mapLeft((err) async {
+      final result = await _connectionRepo.reconnect(profile, ref.read(Preferences.disableMemoryLimit)).run();
+      await result.match((err) async {
         loggy.warning("error reconnecting", err);
         state = AsyncError(err, StackTrace.current);
         await ref
             .read(dialogNotifierProvider.notifier)
             .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
-      }).run();
+      }, (_) => _applyPendingProxySelection(profile));
     }
   }
 
@@ -141,9 +145,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("no active profile, not connecting");
       return;
     }
-    await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
-      ConnectionFailure err,
-    ) async {
+    final result = await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).run();
+    await result.match((ConnectionFailure err) async {
       loggy.warning("error connecting", err);
       //Go err is not normal object to see the go errors are string and need to be dumped
       await ref
@@ -155,7 +158,29 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       }
       await ref.read(Preferences.startedByUser.notifier).update(false);
       state = AsyncError(err, StackTrace.current);
-    }).run();
+    }, (_) => _applyPendingProxySelection(activeProfile));
+  }
+
+  Future<void> _applyPendingProxySelection(ProfileEntity profile) async {
+    final preferences = ref.read(sharedPreferencesProvider).requireValue;
+    final pendingOutbound = PendingProxySelectionStore.read(preferences, profile.id);
+    if (pendingOutbound == null || pendingOutbound.isEmpty) return;
+
+    try {
+      final group = await ref
+          .read(proxyRepositoryProvider)
+          .watchProxies()
+          .map((event) => event.getOrElse((err) => throw err))
+          .firstWhere((group) => group != null && group.items.any((item) => item.tag == pendingOutbound))
+          .timeout(const Duration(seconds: 5));
+      if (group == null || group.selected == pendingOutbound) return;
+
+      await ref.read(proxyRepositoryProvider).selectProxy(group.tag, pendingOutbound).getOrElse((err) {
+        throw err;
+      }).run();
+    } catch (e, st) {
+      loggy.warning("failed to apply pending proxy selection", e, st);
+    }
   }
 
   Future<void> _disconnect() async {

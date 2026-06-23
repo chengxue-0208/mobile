@@ -101,7 +101,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   );
   await _safeInit("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
 
-  await _init("auto subscription preload", () async {
+  await _safeInit("auto subscription preload", () async {
     final profileRepository = container.read(profileRepositoryProvider).requireValue;
     final result = await profileRepository
         .upsertRemote(
@@ -109,7 +109,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
           userOverride: const UserOverride(name: AutoImportSubscriptionConst.profileName),
         )
         .run();
-    result.match((error) => throw error, (_) => null);
+    result.match((error) => Logger.bootstrap.info("auto subscription preload skipped: $error"), (_) => null);
   });
 
   // Eagerly listen to activeProxyNotifierProvider to force synchronous evaluation in microtasks,

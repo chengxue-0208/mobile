@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
@@ -11,12 +13,13 @@ import 'package:hiddify/core/router/go_router/helper/custom_transition.dart';
 import 'package:hiddify/core/router/go_router/refresh_listenable.dart';
 import 'package:hiddify/features/about/widget/about_page.dart';
 import 'package:hiddify/features/home/widget/home_page.dart';
+import 'package:hiddify/features/profile/data/profile_data_providers.dart';
+import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/intro/widget/intro_page.dart';
 import 'package:hiddify/features/log/overview/logs_page.dart';
 import 'package:hiddify/features/per_app_proxy/overview/per_app_proxy_page.dart';
 import 'package:hiddify/features/profile/details/profile_details_page.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_page.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_page.dart';
 import 'package:hiddify/features/route_rules/notifier/rule_notifier.dart';
@@ -67,9 +70,19 @@ int getIndexOfBranch(bool isMobileBreakpoint, bool showProfilesAction, String na
 
 @Riverpod(keepAlive: true)
 class RoutingConfigNotifier extends _$RoutingConfigNotifier {
+  Future<void> _refreshAutoImportedProfile() async {
+    final profileRepository = ref.read(profileRepositoryProvider).requireValue;
+    await profileRepository
+        .upsertRemote(
+          AutoImportSubscriptionConst.url,
+          userOverride: const UserOverride(name: AutoImportSubscriptionConst.profileName),
+        )
+        .run();
+  }
+
   void _importProfile(String url) {
     if (_isAutoImportDeepLink(url)) {
-      ref.read(addProfileNotifierProvider.notifier).addClipboard(url);
+      unawaited(_refreshAutoImportedProfile());
     } else {
       ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url, triggeredByDeepLink: true);
     }

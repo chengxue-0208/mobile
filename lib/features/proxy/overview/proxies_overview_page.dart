@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
+import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/overview/proxies_overview_notifier.dart';
 import 'package:hiddify/features/proxy/widget/proxy_tile.dart';
 import 'package:hiddify/utils/utils.dart';
@@ -17,6 +18,7 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
 
     final proxies = ref.watch(proxiesOverviewNotifierProvider);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
+    final serviceRunning = ref.watch(serviceRunningProvider);
 
     // final selectActiveProxyMutation = useMutation(
     //   initialOnFailure: (error) => CustomToast.error(t.presentShortError(error)).show(context),
@@ -38,11 +40,13 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
           const Gap(8),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
-        tooltip: t.pages.proxies.testDelay,
-        child: const Icon(FluentIcons.flash_24_filled),
-      ),
+      floatingActionButton: serviceRunning
+          ? FloatingActionButton(
+              onPressed: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest("select"),
+              tooltip: t.pages.proxies.testDelay,
+              child: const Icon(FluentIcons.flash_24_filled),
+            )
+          : null,
       body: proxies.when(
         data: (group) => group != null
             ? ListView.builder(
