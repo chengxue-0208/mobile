@@ -254,13 +254,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       ProxiesSort.delay => connectableItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
-
-        final ai = a.urlTestDelay;
-        final bi = b.urlTestDelay;
-        if (ai == 0 && bi == 0) return -1;
-        if (ai == 0 && bi > 0) return 1;
-        if (ai > 0 && bi == 0) return -1;
-        return ai.compareTo(bi);
+        return a.urlTestDelay.compareTo(b.urlTestDelay);
       }),
       ProxiesSort.unsorted => connectableItems,
       ProxiesSort.usage => connectableItems.sortedWith((a, b) {
@@ -317,8 +311,8 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
 
     if (!ref.read(serviceRunningProvider)) {
       // 只允许选择可以连接的节点
-      final isConnectable = cachedDelays[outboundTag] != null && cachedDelays[outboundTag] > 0;
-      if (!isConnectable) {
+      final delay = cachedDelays[outboundTag];
+      if (delay == null || delay == 0) {
         loggy.warning("cannot select non-connectable node: $outboundTag");
         return;
       }
