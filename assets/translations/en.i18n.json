@@ -103,7 +103,7 @@
       "quickSettings": "Quick setting options"
     },
     "proxies": {
-      "title": "Proxies",
+      "title": "Node selection",
       "sort": "Sort proxies",
       "testDelay": "Test delay",
       "empty": "No proxies available",

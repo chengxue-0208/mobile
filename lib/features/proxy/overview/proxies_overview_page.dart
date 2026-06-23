@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
@@ -47,29 +45,19 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
       ),
       body: proxies.when(
         data: (group) => group != null
-            ? LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final crossAxisCount = PlatformUtils.isMobile && width < 600 ? 1 : max(1, (width / 268).floor());
-                  return GridView.builder(
-                    padding: const EdgeInsets.only(bottom: 86),
-                    itemCount: group.items.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      mainAxisExtent: 72,
-                    ),
-                    itemBuilder: (context, index) {
-                      final proxy = group.items[index];
-                      return ProxyTile(
-                        proxy,
-                        selected: group.selected == proxy.tag,
-                        onTap: () async {
-                          await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
-                          // if (selectActiveProxyMutation.state.isInProgress) return;
-                          // selectActiveProxyMutation.setFuture(
-                          // );
-                        },
-                      );
+            ? ListView.builder(
+                padding: const EdgeInsets.only(bottom: 86),
+                itemCount: group.items.length,
+                itemBuilder: (context, index) {
+                  final proxy = group.items[index];
+                  return ProxyTile(
+                    proxy,
+                    selected: group.selected == proxy.tag,
+                    onTap: () async {
+                      await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
+                      // if (selectActiveProxyMutation.state.isInProgress) return;
+                      // selectActiveProxyMutation.setFuture(
+                      // );
                     },
                   );
                 },

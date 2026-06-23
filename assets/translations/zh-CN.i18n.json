@@ -103,7 +103,7 @@
       "quickSettings": "快速设置选项"
     },
     "proxies": {
-      "title": "代理",
+      "title": "节点选择",
       "sort": "排序代理",
       "testDelay": "测试延迟",
       "empty": "无可用代理",
