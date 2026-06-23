@@ -242,13 +242,16 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       return item.tag != 'lowest' && item.tag != 'balance' && type != 'urltest' && type != 'balancer';
     });
 
+    // 过滤掉无法连接的节点（延迟为 0）
+    final connectableItems = visibleItems.where((item) => item.urlTestDelay > 0);
+
     final sortedItems = switch (sortBy) {
-      ProxiesSort.name => visibleItems.sortedWith((a, b) {
+      ProxiesSort.name => connectableItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
         return a.tag.compareTo(b.tag);
       }),
-      ProxiesSort.delay => visibleItems.sortedWith((a, b) {
+      ProxiesSort.delay => connectableItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
 
@@ -259,8 +262,8 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         if (ai > 0 && bi == 0) return -1;
         return ai.compareTo(bi);
       }),
-      ProxiesSort.unsorted => visibleItems,
-      ProxiesSort.usage => visibleItems.sortedWith((a, b) {
+      ProxiesSort.unsorted => connectableItems,
+      ProxiesSort.usage => connectableItems.sortedWith((a, b) {
         if (a.isGroup && !b.isGroup) return -1;
         if (!a.isGroup && b.isGroup) return 1;
         return (b.upload + b.download).compareTo(a.upload + a.download);
@@ -310,8 +313,15 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     final activeProfile = await ref.read(activeProfileProvider.future);
     if (activeProfile == null) return;
     final preferences = ref.read(sharedPreferencesProvider).requireValue;
+    final cachedDelays = ProxyDelayCacheStore.read(preferences, activeProfile.id);
 
     if (!ref.read(serviceRunningProvider)) {
+      // 只允许选择可以连接的节点
+      final isConnectable = cachedDelays[outboundTag] != null && cachedDelays[outboundTag] > 0;
+      if (!isConnectable) {
+        loggy.warning("cannot select non-connectable node: $outboundTag");
+        return;
+      }
       await PendingProxySelectionStore.write(preferences, activeProfile.id, outboundTag);
       for (final item in outbounds.items) {
         item.isSelected = item.tag == outboundTag;
