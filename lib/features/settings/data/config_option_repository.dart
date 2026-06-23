@@ -238,7 +238,7 @@ abstract class ConfigOptions {
 
   static final chainStatus = PreferencesNotifier.create<ChainStatus, String>(
     "chain-status",
-    ChainStatus.off,
+    ChainStatus.extraSecurity,
     mapFrom: ChainStatus.values.byName,
     mapTo: (value) => value.name,
   );
@@ -269,7 +269,7 @@ abstract class ConfigOptions {
 
   static final extraSecurityMode = PreferencesNotifier.create<ChainMode, String>(
     "extra-security-mode",
-    ChainMode.warp,
+    ChainMode.psiphon,
     mapFrom: ChainMode.values.byName,
     mapTo: (value) => value.name,
   );

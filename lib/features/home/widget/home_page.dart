@@ -6,8 +6,6 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
-import 'package:hiddify/features/proxy/active/active_proxy_delay_indicator.dart';
 import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sliver_tools/sliver_tools.dart';
@@ -94,10 +92,9 @@ class HomePage extends HookConsumerWidget {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [ConnectionButton(), ActiveProxyDelayIndicator()],
+                                  children: [ConnectionButton()],
                                 ),
                               ),
-                              ActiveProxyFooter(),
                               Gap(32),
                             ],
                           ),
