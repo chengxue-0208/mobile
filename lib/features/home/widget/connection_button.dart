@@ -9,6 +9,7 @@ import 'package:hiddify/core/widget/animated_text.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
+import 'package:hiddify/features/proxy/data/session_proxy_selection.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:hiddify/gen/assets.gen.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -21,15 +22,19 @@ class ConnectionButton extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final connectionStatus = ref.watch(connectionNotifierProvider);
     final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull == true;
+    final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
+    final selectedNode = ref.watch(sessionProxySelectionProvider);
+    final canStartConnection = activeProfile != null && selectedNode?.matchesProfile(activeProfile.id) == true;
     final today = DateTime.now();
     final presentation = _ConnectionButtonPresentation.from(
       connectionStatus: connectionStatus,
+      canStartConnection: canStartConnection,
       requiresReconnect: requiresReconnect,
       translations: t,
     );
 
     return _ConnectionButton(
-      onTap: _onTapFor(connectionStatus, requiresReconnect, ref),
+      onTap: _onTapFor(connectionStatus, requiresReconnect, canStartConnection, ref),
       enabled: presentation.enabled,
       label: presentation.label,
       buttonColor: presentation.buttonColor,
@@ -39,11 +44,16 @@ class ConnectionButton extends HookConsumerWidget {
     );
   }
 
-  VoidCallback _onTapFor(AsyncValue<ConnectionStatus> connectionStatus, bool requiresReconnect, WidgetRef ref) {
+  VoidCallback _onTapFor(
+    AsyncValue<ConnectionStatus> connectionStatus,
+    bool requiresReconnect,
+    bool canStartConnection,
+    WidgetRef ref,
+  ) {
     return switch (connectionStatus) {
       AsyncData(value: Connected()) when requiresReconnect => () => _reconnect(ref),
       AsyncData(value: Connected()) => () => ref.read(connectionNotifierProvider.notifier).toggleConnection(),
-      AsyncData(value: Disconnected()) || AsyncError() => () => _connect(ref),
+      AsyncData(value: Disconnected()) || AsyncError() when canStartConnection => () => _connect(ref),
       _ => () {},
     };
   }
@@ -82,6 +92,7 @@ class _ConnectionButtonPresentation {
 
   factory _ConnectionButtonPresentation.from({
     required AsyncValue<ConnectionStatus> connectionStatus,
+    required bool canStartConnection,
     required bool requiresReconnect,
     required TranslationsEn translations,
   }) {
@@ -96,10 +107,14 @@ class _ConnectionButtonPresentation {
     };
 
     return _ConnectionButtonPresentation(
-      enabled: connectionStatus is AsyncError || status == const Connected() || status == const Disconnected(),
+      enabled:
+          status == const Connected() ||
+          ((connectionStatus is AsyncError || status == const Disconnected()) && canStartConnection),
       label: switch (status) {
         Connected() when requiresReconnect => translations.connection.reconnect,
+        Disconnected() when !canStartConnection => translations.pages.proxies.title,
         ConnectionStatus() => status.present(translations),
+        null when !canStartConnection => translations.pages.proxies.title,
         null => "",
       },
       buttonColor: buttonColor,

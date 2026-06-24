@@ -13,12 +13,12 @@ import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/data/pending_proxy_selection.dart';
-import 'package:hiddify/features/proxy/data/proxy_delay_cache.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
+import 'package:hiddify/features/proxy/data/proxy_delay_cache.dart';
+import 'package:hiddify/features/proxy/data/session_proxy_selection.dart';
 import 'package:hiddify/features/settings/data/config_option_data_providers.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service_provider.dart';
-
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -328,6 +328,10 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
         return;
       }
       await PendingProxySelectionStore.write(preferences, activeProfile.id, outboundTag);
+      ref.read(sessionProxySelectionProvider.notifier).state = SessionProxySelection(
+        profileId: activeProfile.id,
+        outboundTag: outboundTag,
+      );
       for (final item in outbounds.items) {
         item.isSelected = item.tag == outboundTag;
       }
@@ -337,11 +341,12 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     }
 
     await ref.read(hapticServiceProvider.notifier).lightImpact();
-    await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
-      loggy.warning("error selecting outbound", err);
-      throw err;
-    }).run();
     await PendingProxySelectionStore.write(preferences, activeProfile.id, outboundTag);
+    ref.read(sessionProxySelectionProvider.notifier).state = SessionProxySelection(
+      profileId: activeProfile.id,
+      outboundTag: outboundTag,
+    );
+    final changedSelection = outbounds.selected != outboundTag;
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
       for (final item in outbounds.items) {
@@ -350,6 +355,9 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       newselected.isSelected = true;
       outbounds.selected = newselected.tag;
       state = AsyncValue.data(outbounds);
+    }
+    if (changedSelection) {
+      await ref.read(connectionNotifierProvider.notifier).abortConnection();
     }
   }
 

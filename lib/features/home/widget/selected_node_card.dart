@@ -10,6 +10,7 @@ import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/proxy/data/pending_proxy_selection.dart';
 import 'package:hiddify/features/proxy/data/proxy_delay_cache.dart';
+import 'package:hiddify/features/proxy/data/session_proxy_selection.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -102,12 +103,24 @@ class SelectedNodeCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final serviceRunning = ref.watch(serviceRunningProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider.select((value) => value.valueOrNull));
+    final activeProfile = ref.watch(activeProfileProvider).valueOrNull;
+    final sessionSelection = ref.watch(sessionProxySelectionProvider);
+    final selectedThisSession = activeProfile != null && sessionSelection?.matchesProfile(activeProfile.id) == true
+        ? sessionSelection!.outboundTag
+        : null;
     final snapshot = ref.watch(selectedNodeSnapshotProvider).valueOrNull;
 
     final title = t.pages.proxies.title;
     final subtitle = serviceRunning ? t.connection.connected : "";
     final activeSnapshot = _activeProxySnapshot(activeProxy);
-    final node = activeSnapshot ?? snapshot;
+    final node =
+        activeSnapshot ??
+        (selectedThisSession == null
+            ? null
+            : SelectedNodeSnapshot(
+                label: selectedThisSession,
+                delay: snapshot?.label == selectedThisSession ? snapshot?.delay ?? 0 : 0,
+              ));
     final nodeLabel = node?.label;
     final delay = node?.delay ?? 0;
     final hasNode = nodeLabel != null && nodeLabel.trim().isNotEmpty;
